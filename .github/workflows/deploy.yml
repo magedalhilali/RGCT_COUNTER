@@ -28,10 +28,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          # We removed the "cache: npm" line here because you don't have a lock file yet.
           
       - name: Install dependencies
-        run: npm install    # <--- CHANGED FROM "npm ci"
+        run: npm install
+        # We use "npm install" instead of "npm ci" to auto-generate the missing file.
         
       - name: Build
         run: npm run build
