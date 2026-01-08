@@ -80,19 +80,21 @@ export const DistributionChart: React.FC<DistributionChartProps> = ({ data }) =>
         </ResponsiveContainer>
       </div>
 
-      {/* Custom Legend - Dynamic height that expands the container */}
+      {/* Custom Legend - Responsive Grid (Vertical stack on mobile) */}
       <div className="mt-6 border-t border-slate-100 pt-4">
-        <div className="flex flex-wrap gap-x-4 gap-y-3 justify-center">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           {chartData.map((entry, index) => (
-            <div key={index} className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
-              <div 
-                className="w-2.5 h-2.5 rounded-full flex-shrink-0" 
-                style={{ backgroundColor: COLORS[index % COLORS.length] }} 
-              />
-              <span className="font-medium max-w-[120px] truncate" title={entry.originalName}>
-                {entry.originalName}
-              </span>
-              <span className="text-slate-400 border-l border-slate-200 pl-2 ml-1">
+            <div key={index} className="flex items-center justify-between text-xs text-slate-600 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 transition-colors hover:bg-slate-100">
+              <div className="flex items-center gap-2 overflow-hidden">
+                 <div 
+                   className="w-2.5 h-2.5 rounded-full flex-shrink-0" 
+                   style={{ backgroundColor: COLORS[index % COLORS.length] }} 
+                 />
+                 <span className="font-medium truncate" title={entry.originalName}>
+                   {entry.originalName}
+                 </span>
+              </div>
+              <span className="text-slate-400 font-mono ml-2 border-l border-slate-200 pl-2">
                 {entry.percentage.toFixed(1)}%
               </span>
             </div>

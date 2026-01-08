@@ -1,3 +1,4 @@
+
 export interface FrequencyItem {
   name: string;
   originalName: string; // The display version (e.g. first occurrence)
@@ -13,6 +14,30 @@ export interface AnalysisResult {
 
 export enum AppStep {
   UPLOAD = 'UPLOAD',
-  SELECT_COLUMN = 'SELECT_COLUMN',
-  DASHBOARD = 'DASHBOARD'
+  WORKSPACE = 'WORKSPACE'
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'model' | 'system';
+  content: string;
+  timestamp: Date;
+  isThinking?: boolean;
+  toolResult?: any; // If the message displays a chart or data result
+}
+
+export interface DataColumn {
+  key: string;
+  type: 'string' | 'number' | 'date';
+}
+
+export type ViewMode = 'RAW' | 'ANALYSIS' | 'CHARTS';
+
+export interface ChartConfig {
+  title: string;
+  description: string;
+  type: 'bar' | 'line' | 'pie' | 'area' | 'scatter';
+  data: any[];
+  xAxisKey: string;
+  dataKeys: { key: string; color: string; name?: string }[];
 }
