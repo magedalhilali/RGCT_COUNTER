@@ -17,7 +17,8 @@ interface ChartsViewProps {
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#10b981', '#3b82f6', '#f59e0b', '#0f172a', '#334155', '#94a3b8'];
 
-// --- SHARED INTELLIGENCE ---
+// --- 1. INTELLIGENT DATA SCANNING ---
+// Scans the first 20 unique values of each column so the AI knows "Yemen" = "YEMEN"
 const generateDataPreview = (headers: string[], data: any[]) => {
     const preview: Record<string, any[]> = {};
     if (!data || data.length === 0) return "No data available.";
@@ -35,7 +36,8 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
   const [chartConfig, setChartConfig] = useState<ChartConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // --- SEAMLESS UPDATES ---
+  // --- 2. SEAMLESS SYNC ---
+  // If the Chatbot generates a chart, show it here immediately
   useEffect(() => {
     if (externalChartConfig) {
       setChartConfig(externalChartConfig);
@@ -44,29 +46,29 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
     }
   }, [externalChartConfig]);
 
-  // --- ROBUST EVALUATION ---
+  // --- 3. ROBUST CODE EXECUTION ---
   const safeEvaluate = (code: string) => {
     try {
       if (typeof code !== 'string' || !code.trim()) {
-         return { success: false, error: "AI returned empty or invalid code." };
+         return { success: false, error: "AI returned empty code." };
       }
 
       if (!window.fullDataset) throw new Error("Dataset not loaded.");
       
-      // FIX 1: Handle "Identifier 'data' has already been declared"
-      // We replace 'const data =' with 'data =' to allow reassignment of the argument
-      // We also strip markdown code blocks just in case
+      // SANITIZATION STEP:
+      // 1. Remove markdown code blocks (```javascript)
+      // 2. Remove 'const data =' or 'let data =' (forces AI to use the real data passed in)
       let sanitizedCode = code.replace(/```javascript/g, '').replace(/```/g, '');
-      sanitizedCode = sanitizedCode.replace(/(const|let|var)\s+data\s*=/g, 'data =');
+      sanitizedCode = sanitizedCode.replace(/(const|let|var)\s+data\s*=/g, '// data already exists');
 
       const sandboxFn = new Function('data', sanitizedCode);
       const result = sandboxFn(window.fullDataset);
       return { success: true, result };
     } catch (error: any) {
-      // Provide a clearer error message for runtime crashes (like .replace on undefined)
+      // User-friendly error mapping
       let niceError = error.message;
-      if (niceError.includes('replace') || niceError.includes('toLowerCase')) {
-         niceError += " (Likely caused by empty cells in the data. AI needs to check for nulls.)";
+      if (niceError.includes('replace') || niceError.includes('toLowerCase') || niceError.includes('trim')) {
+         niceError += " (Likely caused by empty cells. The AI code didn't handle null values.)";
       }
       return { success: false, error: niceError };
     }
@@ -89,32 +91,37 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
          dataPreview = generateDataPreview(headers, window.fullDataset);
       }
 
+      // --- 4. THE "BRAIN" UPDATE ---
       const systemInstruction = `
         You are an Expert Data Visualization Engineer.
         You have access to a dataset in the variable 'data'. Headers: ${JSON.stringify(headers)}.
         
-        ### DATA PREVIEW / DICTIONARY
-        Use this to match user terms to exact data values.
+        ### DATA DICTIONARY (Use this to match terms like "Yemen" to "YEMEN")
         ${dataPreview}
 
         ### GOAL
         Generate a JSON configuration for a Recharts graph based on the user's request.
 
-        ### CRITICAL CODING RULES
-        1. **Null Safety is MANDATORY:** The dataset has empty cells. You MUST handle null/undefined values.
-           - BAD: \`row['Nationality'].replace(...)\` (Crashes if null)
-           - GOOD: \`(row['Nationality'] || '').toString().replace(...)\`
-        2. **Return an ARRAY:** Recharts fails if you return an Object. 
-           - BAD: { "A": 10, "B": 20 }
-           - GOOD: [{ name: "A", value: 10 }, { name: "B", value: 20 }]
-        3. **Standardize Keys:** Always use 'name' for the label and 'value' for the number.
+        ### CRITICAL CODING RULES (Follow these or the code will crash)
+        1. **NULL SAFETY IS MANDATORY:** The dataset has empty/null cells.
+           - ❌ BAD: \`row['Nationality'].trim()\` -> Crashes if null.
+           - ✅ GOOD: \`(row['Nationality'] || '').toString().trim()\` -> Safe.
+        
+        2. **DO NOT REDECLARE DATA:** - ❌ BAD: \`const data = [...]\`
+           - ✅ GOOD: Use the \`data\` variable directly.
+
+        3. **RETURN AN ARRAY:** Recharts requires an Array of Objects.
+           - ❌ BAD: \`return { "A": 10, "B": 20 }\`
+           - ✅ GOOD: \`return [{ name: "A", value: 10 }, { name: "B", value: 20 }]\`
+
+        4. **KEYS:** Always use 'name' (for the label) and 'value' (for the number).
 
         ### JSON RESPONSE FORMAT
         {
           "title": "Chart Title",
           "description": "Short explanation",
           "type": "bar" | "line" | "pie" | "area" | "scatter",
-          "javascript": "return data.filter(...).map(...);", 
+          "javascript": "return data.reduce((acc, row) => ... );", 
           "xAxisKey": "name", 
           "dataKeys": [ { "key": "value", "color": "#6366f1", "name": "Count" } ]
         }
@@ -144,21 +151,28 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
          throw new Error("AI failed to generate code logic. Please try rephrasing.");
       }
 
+      // Execute the code
       const exec = safeEvaluate(parsed.javascript);
+      
       if (!exec.success) {
         throw new Error(`Code Error: ${exec.error}`);
       }
 
-      if (!Array.isArray(exec.result)) {
-        throw new Error("AI generated data in the wrong format (Object instead of Array).");
+      // --- 5. FINAL SAFETY CHECK (Auto-fix Object to Array) ---
+      let finalData = exec.result;
+      if (!Array.isArray(finalData) && typeof finalData === 'object' && finalData !== null) {
+          // If AI returned a Dictionary { "A": 10 }, convert it to Array [{name:"A", value:10}]
+          finalData = Object.entries(finalData).map(([k, v]) => ({ name: k, value: v }));
+      } else if (!Array.isArray(finalData)) {
+          throw new Error("AI generated data in the wrong format (Object instead of Array).");
       }
 
       const config: ChartConfig = {
         title: parsed.title,
         description: parsed.description,
         type: parsed.type,
-        data: exec.result,
-        xAxisKey: parsed.xAxisKey,
+        data: finalData,
+        xAxisKey: parsed.xAxisKey || 'name',
         dataKeys: parsed.dataKeys
       };
 
