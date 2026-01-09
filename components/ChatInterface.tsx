@@ -17,8 +17,6 @@ interface ChatInterfaceProps {
 
 // --- Logic Helpers ---
 
-// 1. Safe Evaluate: Executes code. 
-// Supports 'data' as Array (Active Sheet) OR Object (All Sheets)
 const safeEvaluate = (code: string, context: 'active' | 'all') => {
   try {
     if (context === 'active') {
@@ -43,7 +41,6 @@ const formatResult = (result: any): string => {
   
   if (Array.isArray(result)) {
     if (result.length === 0) return "*No matches found.*";
-    // Increased limit from 20 to 100 to show full lists when requested
     if (result.length <= 100) {
       return `**Found ${result.length} items:**\n\n` + result.map(i => `- ${typeof i === 'object' ? JSON.stringify(i) : String(i)}`).join('\n');
     }
@@ -56,6 +53,23 @@ const formatResult = (result: any): string => {
   }
   
   return String(result);
+};
+
+// --- NEW: Helper to get data context ---
+const generateDataPreview = (headers: string[], data: any[]) => {
+    const preview: Record<string, any[]> = {};
+    if (!data || data.length === 0) return "No data available.";
+
+    // For each column, find up to 20 unique values to show the AI
+    headers.forEach(header => {
+        // Get all values for this column
+        const allValues = data.map(row => row[header]);
+        // Filter out nulls/undefined and get unique ones
+        const uniqueValues = Array.from(new Set(allValues.filter(v => v !== null && v !== undefined && v !== '')));
+        // Take the top 20
+        preview[header] = uniqueValues.slice(0, 20);
+    });
+    return JSON.stringify(preview);
 };
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
@@ -71,8 +85,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [inputValue, setInputValue] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [showCodeForId, setShowCodeForId] = useState<string | null>(null);
-  
-  // New State: Data Context (Active Sheet vs All Sheets)
   const [dataContext, setDataContext] = useState<'active' | 'all'>('active');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -109,22 +121,34 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     try {
       const isMultiSheet = dataContext === 'all';
       
-      // Construct context prompt based on mode
       let dataDescription = "";
+      
       if (isMultiSheet) {
           const sheetNames = Object.keys(window.allSheets || {});
           dataDescription = `
             You have access to the ENTIRE WORKBOOK in the variable \`data\`.
             \`data\` is an OBJECT where keys are Sheet Names and values are Arrays of rows.
             Available Sheet Names: ${JSON.stringify(sheetNames)}.
-            Example access: \`data["${sheetNames[0]}"]\`.
           `;
       } else {
+          // --- INTELLIGENT DATA SCANNING ---
+          // We generate a preview of the actual values so the AI knows "Egyptian" matches "EGYPT"
+          let dataPreview = "Data unavailable";
+          if (window.fullDataset) {
+             dataPreview = generateDataPreview(headers, window.fullDataset);
+          }
+
           dataDescription = `
             You have access to the ACTIVE SHEET in the variable \`data\`.
             \`data\` is an ARRAY of objects (rows).
             Current Sheet Name: "${activeSheetName}".
             Headers: ${JSON.stringify(headers)}.
+
+            ### DATA PREVIEW / VALUE DICTIONARY
+            Here are the unique values found in the first few columns. USE THIS TO MATCH USER TERMS TO ACTUAL DATA VALUES.
+            (Example: If user asks for "Egyptian", check this list. If you see "EGYPT", use "EGYPT" in your code).
+            
+            ${dataPreview}
           `;
       }
 
@@ -132,8 +156,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       You are an expert Data Analyst Logic Engine. 
       
       ${dataDescription}
-      
-      Your goal is to answer the user's question by generating JavaScript code or plain text.
       
       ### RESPONSE PROTOCOL (JSON ONLY)
       You must return a valid JSON object. No Markdown outside the JSON.
@@ -148,7 +170,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         "explanation": "..."
       }
       
-      **Type 3: Chart Generation (Only valid for SINGLE/ACTIVE sheet context)**
+      **Type 3: Chart Generation**
       {
         "type": "chart_generation",
         "title": "...",
@@ -159,11 +181,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       }
 
       ### CODING RULES
-      1. Return the result directly (e.g. \`return data.filter...\`).
-      2. If the user asks across multiple sheets, use the 'data' object keys.
-      3. For charts, if in 'All Sheets' mode, you MUST aggregate data into a single array before returning it in 'javascript'.
-      4. CRITICAL DATA CONSISTENCY: The objects returned by your 'javascript' MUST use the exact keys defined in 'xAxisKey' and 'dataKeys'.
-         - Recommendation: Always map your result to use keys "name" (for the label) and "value" (for the number) to avoid NaN errors.
+      1. **Natural Language Matching:** If the user uses a term (e.g. "Egyptian") that doesn't perfectly match the data (e.g. "EGYPT"), ALWAYS check the Data Preview provided above. Use the exact value found in the data. If the exact value isn't obvious, use \`.toLowerCase().includes('term')\` for fuzzy matching.
+      
+      2. **Chart Data Format:** - NEVER return a plain Object (dictionary) for charts. Recharts requires an ARRAY of Objects.
+         - **BAD:** \`return { "EGYPT": 10, "INDIA": 5 }\`
+         - **GOOD:** \`const counts = ...; return Object.entries(counts).map(([k, v]) => ({ name: k, value: v }));\`
+         - Always use keys "name" and "value" for bar/pie charts.
       `;
 
       const ai = new GoogleGenAI({ apiKey });
@@ -209,17 +232,22 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       else if (parsed.type === 'chart_generation') {
         const exec = safeEvaluate(parsed.javascript, dataContext);
         if (exec.success) {
-            const config: ChartConfig = {
-                title: parsed.title,
-                description: parsed.description,
-                type: parsed.chartType,
-                data: exec.result,
-                xAxisKey: parsed.xAxisKey,
-                dataKeys: parsed.dataKeys
-            };
-            onChartGenerated(config);
-            finalContent = parsed.message || "Chart generated. Please switch to the Charts tab to view it.";
-            toolResult = { type: 'chart_success', code: parsed.javascript };
+            if (!Array.isArray(exec.result)) {
+                finalContent = "I generated data, but it was in the wrong format (Object instead of Array). Please ask me to 'list' it instead.";
+                toolResult = { type: 'error', code: parsed.javascript, error: "Result was not an array." };
+            } else {
+                const config: ChartConfig = {
+                    title: parsed.title,
+                    description: parsed.description,
+                    type: parsed.chartType,
+                    data: exec.result,
+                    xAxisKey: parsed.xAxisKey,
+                    dataKeys: parsed.dataKeys
+                };
+                onChartGenerated(config);
+                finalContent = parsed.message || "Chart generated. Please switch to the Charts tab to view it.";
+                toolResult = { type: 'chart_success', code: parsed.javascript };
+            }
         } else {
             finalContent = "I tried to generate the chart, but processing the data failed.";
             toolResult = { type: 'error', code: parsed.javascript, error: exec.error };
