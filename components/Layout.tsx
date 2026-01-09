@@ -20,7 +20,14 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               Ramah <span className="text-slate-400 font-normal">Counter</span>
             </h1>
           </div>
-          <div className="flex items-center gap-4">
+          
+          <div className="flex items-center gap-3">
+             {/* NEW: Developer Credit Pill */}
+             <div className="hidden sm:block text-xs font-medium text-slate-500 bg-slate-100/50 px-3 py-1 rounded-full border border-slate-200/50">
+               Developed by: Maged Al-Hilali
+             </div>
+
+             {/* Existing Beta Pill */}
              <div className="text-xs font-medium text-slate-500 bg-slate-100/50 px-3 py-1 rounded-full border border-slate-200/50">
                v2.0 Beta
              </div>
