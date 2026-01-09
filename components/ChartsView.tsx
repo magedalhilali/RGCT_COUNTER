@@ -17,12 +17,13 @@ interface ChartsViewProps {
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#10b981', '#3b82f6', '#f59e0b', '#0f172a', '#334155', '#94a3b8'];
 
-// --- NEW: Helper to get data context (Same as ChatInterface) ---
+// --- NEW: Helper to get data context (Copied from ChatInterface) ---
 const generateDataPreview = (headers: string[], data: any[]) => {
     const preview: Record<string, any[]> = {};
     if (!data || data.length === 0) return "No data available.";
 
     // For each column, find up to 20 unique values to show the AI
+    // This helps it map "Yemen" -> "YEMEN" or "Mgr" -> "Manager"
     headers.forEach(header => {
         const allValues = data.map(row => row[header]);
         const uniqueValues = Array.from(new Set(allValues.filter(v => v !== null && v !== undefined && v !== '')));
