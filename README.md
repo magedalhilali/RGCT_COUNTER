@@ -1,20 +1,39 @@
 <div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+<img width="1200" height="475" alt="GHBanner" src="https://static.wixstatic.com/media/756a6a_ceb9471db99c47dc9aa7cca7f307751d~mv2.jpeg" />
 </div>
 
-# Run and deploy your AI Studio app
+# RamahCounter
 
-This contains everything you need to run your app locally.
+**A modern tool for analyzing and cleaning categorical data from Excel.**
 
-View your app in AI Studio: https://ai.studio/apps/drive/13FJrSsDJ0WhFS8pzEf5ef7Gzgbo-_yqy
+Upload an `.xlsx` file, visualize frequency distributions, and interactively clean your data by removing specific rows. The app instantly recalculates percentages and charts based on your refined dataset.
 
-## Run Locally
+### ✨ Features
+* **Instant Analysis:** Frequency counts & % share for any Excel column.
+* **Interactive Cleaning:** Delete rows on hover; charts update instantly.
+* **Smart History:** Undo changes or reset to raw data.
+* **Export:** Download your cleaned analysis as a CSV.
 
-**Prerequisites:**  Node.js
+### 🚀 Quick Start
 
+**Prerequisite:** Node.js
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+1. **Clone the repo**
+   ```bash
+   git clone [https://github.com/magedalhilali/RGCT_COUNTER.git](https://github.com/magedalhilali/RGCT_COUNTER.git)
+   Install dependencies
+
+Bash
+
+npm install
+Set API Key Set the GEMINI_API_KEY in .env.local to your Gemini API key.
+
+Run the app
+
+Bash
+
+npm run dev
+🛠️ Tech Stack
+Built with React, TypeScript, Tailwind CSS, and Vite.
+
+Developed by Maged Al-Hilali
