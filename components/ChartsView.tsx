@@ -12,11 +12,12 @@ interface ChartsViewProps {
   apiKey: string | null;
   fileName: string;
   externalChartConfig: ChartConfig | null;
+  onRequestApiKey: () => void;
 }
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#10b981', '#3b82f6', '#f59e0b', '#0f172a', '#334155', '#94a3b8'];
 
-export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileName, externalChartConfig }) => {
+export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileName, externalChartConfig, onRequestApiKey }) => {
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [chartConfig, setChartConfig] = useState<ChartConfig | null>(null);
@@ -41,7 +42,12 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
   };
 
   const handleGenerate = async () => {
-    if (!prompt.trim() || !apiKey) return;
+    if (!prompt.trim()) return;
+    
+    if (!apiKey) {
+        onRequestApiKey();
+        return;
+    }
 
     setIsGenerating(true);
     setError(null);
@@ -291,13 +297,12 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
              />
              <button 
                 onClick={handleGenerate}
-                disabled={isGenerating || !apiKey}
+                disabled={isGenerating}
                 className="absolute right-2 top-2 p-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors"
              >
                 {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
              </button>
            </div>
-           {!apiKey && <p className="text-xs text-red-500 mt-2">API Key required to generate charts.</p>}
         </div>
 
         {/* Chart Display Section */}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { Download, Search, ArrowUpDown, ArrowUp, ArrowDown, Pin, PinOff, Trash2 } from 'lucide-react';
 import { AnalysisResult } from '../types';
 import { exportToCSV } from '../utils/processor';
@@ -6,7 +6,7 @@ import { exportToCSV } from '../utils/processor';
 interface DataTableProps {
   data: AnalysisResult['data'];
   originalColumnName: string;
-  onDeleteRow: (itemName: string) => void; // New prop
+  onDeleteRow?: (originalName: string) => void;
 }
 
 type SortKey = 'originalName' | 'count';
@@ -19,6 +19,43 @@ export const DataTable: React.FC<DataTableProps> = ({ data, originalColumnName, 
     key: 'count',
     direction: 'desc'
   });
+
+  // Column Resizing State
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({
+    name: 300,
+    count: 150,
+    percentage: 150,
+    distribution: 400,
+    actions: 80
+  });
+  const resizingRef = useRef<{ header: string; startX: number; startWidth: number } | null>(null);
+
+  // Resizing Logic
+  const handleMouseDown = (e: React.MouseEvent, header: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startWidth = columnWidths[header] || 150;
+    resizingRef.current = { header, startX: e.clientX, startWidth };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+  };
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!resizingRef.current) return;
+    const { header, startX, startWidth } = resizingRef.current;
+    const diff = e.clientX - startX;
+    const newWidth = Math.max(60, startWidth + diff); // Minimum width 60px
+    setColumnWidths(prev => ({ ...prev, [header]: newWidth }));
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    resizingRef.current = null;
+    document.removeEventListener('mousemove', handleMouseMove);
+    document.removeEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = '';
+  }, [handleMouseMove]);
   
   // 1. Filter Data
   const filteredData = data.filter(item => 
@@ -82,83 +119,123 @@ export const DataTable: React.FC<DataTableProps> = ({ data, originalColumnName, 
         </div>
       </div>
 
-      {/* Table Container */}
+      {/* Table Container - Conditional styles for Sticky Mode */}
       <div className={`overflow-x-auto transition-all duration-300 ${isSticky ? 'max-h-[70vh] overflow-y-auto border-b border-slate-200 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100' : ''}`}>
-        <table className="min-w-full divide-y divide-slate-200 relative border-collapse">
+        <table className="min-w-full divide-y divide-slate-200 relative border-collapse table-fixed">
           <thead className="bg-slate-50">
             <tr>
               <th 
                 scope="col" 
-                className={`px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors group select-none ${isSticky ? 'sticky top-0 z-10 bg-slate-50 shadow-sm' : ''}`}
+                style={{ width: columnWidths.name }}
+                className={`relative px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors group select-none ${isSticky ? 'sticky top-0 z-10 bg-slate-50 shadow-sm' : ''}`}
                 onClick={() => handleSort('originalName')}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 overflow-hidden">
                   <button 
                     onClick={(e) => {
                       e.stopPropagation();
                       setIsSticky(!isSticky);
                     }}
-                    className={`p-1.5 rounded-md transition-all mr-1 ${isSticky ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' : 'bg-transparent text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`}
+                    className={`p-1.5 rounded-md transition-all mr-1 flex-shrink-0 ${isSticky ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' : 'bg-transparent text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`}
                     title={isSticky ? "Unfreeze Header" : "Freeze Header to scroll"}
                   >
                     {isSticky ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
                   </button>
-                  Name
+                  <span className="truncate">Name</span>
                   <SortIcon columnKey="originalName" />
                 </div>
+                {/* Resize Handle */}
+                <div 
+                  onMouseDown={(e) => handleMouseDown(e, 'name')}
+                  className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-indigo-400 group-hover:bg-indigo-200/50 z-20 transition-colors"
+                />
               </th>
+              
               <th 
                 scope="col" 
-                className={`px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors group select-none ${isSticky ? 'sticky top-0 z-10 bg-slate-50 shadow-sm' : ''}`}
+                style={{ width: columnWidths.count }}
+                className={`relative px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors group select-none ${isSticky ? 'sticky top-0 z-10 bg-slate-50 shadow-sm' : ''}`}
                 onClick={() => handleSort('count')}
               >
-                <div className="flex items-center justify-end gap-2">
-                  Count
+                <div className="flex items-center justify-end gap-2 overflow-hidden">
+                  <span className="truncate">Count</span>
                   <SortIcon columnKey="count" />
                 </div>
+                <div 
+                  onMouseDown={(e) => handleMouseDown(e, 'count')}
+                  className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-indigo-400 group-hover:bg-indigo-200/50 z-20 transition-colors"
+                />
               </th>
-              <th scope="col" className={`px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider ${isSticky ? 'sticky top-0 z-10 bg-slate-50 shadow-sm' : ''}`}>
-                % of Total
+              
+              <th 
+                scope="col" 
+                style={{ width: columnWidths.percentage }}
+                className={`relative px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider group ${isSticky ? 'sticky top-0 z-10 bg-slate-50 shadow-sm' : ''}`}
+              >
+                <span className="truncate block">% of Total</span>
+                <div 
+                  onMouseDown={(e) => handleMouseDown(e, 'percentage')}
+                  className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-indigo-400 group-hover:bg-indigo-200/50 z-20 transition-colors"
+                />
               </th>
-              <th scope="col" className={`px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider w-1/3 ${isSticky ? 'sticky top-0 z-10 bg-slate-50 shadow-sm' : ''}`}>
-                Distribution
+              
+              <th 
+                scope="col" 
+                style={{ width: columnWidths.distribution }}
+                className={`relative px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider group ${isSticky ? 'sticky top-0 z-10 bg-slate-50 shadow-sm' : ''}`}
+              >
+                <span className="truncate block">Distribution</span>
+                <div 
+                  onMouseDown={(e) => handleMouseDown(e, 'distribution')}
+                  className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-indigo-400 group-hover:bg-indigo-200/50 z-20 transition-colors"
+                />
               </th>
-              {/* Empty header for delete action */}
-              <th scope="col" className={`w-10 ${isSticky ? 'sticky top-0 z-10 bg-slate-50 shadow-sm' : ''}`}></th>
+              
+              {/* Action Column */}
+              <th 
+                scope="col" 
+                style={{ width: columnWidths.actions }}
+                className={`relative px-4 py-3 text-right ${isSticky ? 'sticky top-0 z-10 bg-slate-50 shadow-sm' : ''}`}
+              >
+                <span className="sr-only">Actions</span>
+                 <div 
+                  onMouseDown={(e) => handleMouseDown(e, 'actions')}
+                  className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-indigo-400 group-hover:bg-indigo-200/50 z-20 transition-colors"
+                />
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-slate-200">
             {sortedData.length > 0 ? (
               sortedData.map((item, idx) => (
                 <tr key={idx} className="group hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 overflow-hidden text-ellipsis">
                     {item.originalName}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 text-right">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 text-right overflow-hidden text-ellipsis">
                     {item.count.toLocaleString()}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 text-right">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 text-right overflow-hidden text-ellipsis">
                     {item.percentage.toFixed(2)}%
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap align-middle">
+                  <td className="px-6 py-4 whitespace-nowrap align-middle overflow-hidden">
                     <div className="w-full bg-slate-100 rounded-full h-2">
                       <div 
-                        className="bg-indigo-600 h-2 rounded-full transition-all duration-500" 
+                        className="bg-indigo-600 h-2 rounded-full" 
                         style={{ width: `${Math.max(item.percentage, 1)}%` }}
                       ></div>
                     </div>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-right">
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onDeleteRow(item.originalName);
-                        }}
-                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
-                        title="Remove from analysis"
-                    >
-                        <Trash2 className="w-4 h-4" />
-                    </button>
+                     {onDeleteRow && (
+                       <button 
+                         onClick={() => onDeleteRow(item.originalName)}
+                         className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                         title="Remove this row"
+                       >
+                         <Trash2 className="w-4 h-4" />
+                       </button>
+                     )}
                   </td>
                 </tr>
               ))

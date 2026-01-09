@@ -9,7 +9,7 @@ import { RawDataTable } from './components/RawDataTable';
 import { ChartsView } from './components/ChartsView';
 import { analyzeData } from './utils/processor';
 import { AppStep, AnalysisResult, ViewMode, ChartConfig } from './types';
-import { Table, BarChart3, PieChart, X, Layers } from 'lucide-react';
+import { Table, BarChart3, PieChart, X, Layers, Key } from 'lucide-react';
 
 // Extend window interface to satisfy TypeScript
 declare global {
@@ -139,7 +139,11 @@ function App() {
 
   return (
     <Layout>
-      <ApiKeyModal isOpen={showKeyModal} onSave={handleSaveKey} />
+      <ApiKeyModal 
+        isOpen={showKeyModal} 
+        onSave={handleSaveKey} 
+        onSkip={() => setShowKeyModal(false)}
+      />
 
       {step === AppStep.UPLOAD && (
         <FileUpload onDataLoaded={handleDataLoaded} />
@@ -206,11 +210,13 @@ function App() {
                     </button>
                  </div>
 
-                 {!apiKey && (
-                    <button onClick={() => setShowKeyModal(true)} className="text-xs bg-slate-900 text-white px-3 py-1.5 rounded-lg hover:bg-slate-800 transition-colors whitespace-nowrap">
-                       Add API Key
-                    </button>
-                 )}
+                 <button 
+                    onClick={() => setShowKeyModal(true)} 
+                    className={`text-xs px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap flex items-center gap-2 border ${apiKey ? 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50' : 'bg-slate-900 border-transparent text-white hover:bg-slate-800'}`}
+                 >
+                    <Key className="w-3.5 h-3.5" />
+                    {apiKey ? 'Change Key' : 'Add API Key'}
+                 </button>
               </div>
             </div>
 
@@ -250,6 +256,7 @@ function App() {
                       apiKey={apiKey} 
                       fileName={activeSheetName}
                       externalChartConfig={generatedChart}
+                      onRequestApiKey={() => setShowKeyModal(true)}
                     />
                  </div>
                )}
@@ -265,6 +272,7 @@ function App() {
             onChartGenerated={handleChartGeneratedFromChat}
             isOpen={isChatOpen}
             toggleOpen={() => setIsChatOpen(!isChatOpen)}
+            onRequestApiKey={() => setShowKeyModal(true)}
           />
         </div>
       )}

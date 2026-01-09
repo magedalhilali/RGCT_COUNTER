@@ -12,6 +12,7 @@ interface ChatInterfaceProps {
   onChartGenerated: (config: ChartConfig) => void;
   isOpen: boolean;
   toggleOpen: () => void;
+  onRequestApiKey: () => void;
 }
 
 // --- Logic Helpers ---
@@ -42,7 +43,8 @@ const formatResult = (result: any): string => {
   
   if (Array.isArray(result)) {
     if (result.length === 0) return "*No matches found.*";
-    if (result.length <= 20) {
+    // Increased limit from 20 to 100 to show full lists when requested
+    if (result.length <= 100) {
       return `**Found ${result.length} items:**\n\n` + result.map(i => `- ${typeof i === 'object' ? JSON.stringify(i) : String(i)}`).join('\n');
     }
     const preview = result.slice(0, 10).map(i => `- ${typeof i === 'object' ? JSON.stringify(i) : String(i)}`).join('\n');
@@ -62,7 +64,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   headers, 
   onChartGenerated,
   isOpen, 
-  toggleOpen 
+  toggleOpen,
+  onRequestApiKey
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -86,7 +89,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   };
 
   const handleSendMessage = async (text: string) => {
-    if (!text.trim() || !apiKey) return;
+    if (!text.trim()) return;
+
+    if (!apiKey) {
+        onRequestApiKey();
+        return;
+    }
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
@@ -267,10 +275,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 <Bot className="w-5 h-5 text-indigo-600" />
                 </div>
                 <div>
-                <h3 className="font-semibold text-slate-800 text-sm">Maged's Data Assistant</h3>
+                <h3 className="font-semibold text-slate-800 text-sm">Data Assistant</h3>
                 <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Online</span>
+                    <span className={`w-2 h-2 rounded-full ${apiKey ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></span>
+                    <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">{apiKey ? 'Online' : 'Offline'}</span>
                 </div>
                 </div>
             </div>
@@ -388,13 +396,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(inputValue)}
-              placeholder={apiKey ? "Ask a data question..." : "Enter API Key first"}
-              disabled={!apiKey || isProcessing}
+              placeholder="Ask a data question..."
+              disabled={isProcessing}
               className="w-full pl-5 pr-12 py-3.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm group-hover:shadow-md"
             />
             <button 
               onClick={() => handleSendMessage(inputValue)}
-              disabled={!inputValue || !apiKey || isProcessing}
+              disabled={!inputValue || isProcessing}
               className="absolute right-2 top-2 p-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:bg-slate-300 transition-all"
             >
               <Send className="w-4 h-4" />
