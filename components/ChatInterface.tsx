@@ -267,7 +267,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 <Bot className="w-5 h-5 text-indigo-600" />
                 </div>
                 <div>
-                <h3 className="font-semibold text-slate-800 text-sm">Data Assistant</h3>
+                <h3 className="font-semibold text-slate-800 text-sm">Maged's Data Assistant</h3>
                 <div className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                     <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Online</span>
