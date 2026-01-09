@@ -1,36 +1,33 @@
-name: Deploy Static Site
+name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: ["main"] # Ensure this matches your branch name (main or master)
-  workflow_dispatch:
+    branches: [ main ] # Triggers on push to main branch
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  contents: write # Required to allow the action to push to the gh-pages branch
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-      
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
         with:
-          path: '.' # This uploads your entire repository
-      
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
       - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v4
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: dist # The folder the build script generates
+          branch: gh-pages # The branch the action handles automatically
