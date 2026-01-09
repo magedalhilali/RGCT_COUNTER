@@ -77,7 +77,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
 
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-2.0-flash',
         contents: [
             { role: 'user', parts: [{ text: `Create a chart for: ${prompt}` }] }
         ],
@@ -123,7 +123,8 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
             <div key={`legend-${index}`} className="flex items-center gap-2 p-2 bg-slate-50 rounded border border-slate-100 text-xs">
               <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
               <span className="truncate font-medium text-slate-700" title={entry[nameKey]}>{entry[nameKey]}</span>
-              <span className="text-slate-500 font-mono ml-auto">{Number(entry[dataKey]).toLocaleString()}</span>
+              {/* FIXED: Added '|| 0' to prevent NaN if the key is missing */}
+              <span className="text-slate-500 font-mono ml-auto">{Number(entry[dataKey] || 0).toLocaleString()}</span>
             </div>
           ))}
         </div>
@@ -228,14 +229,14 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
                  <PieChart>
                     <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                     <Pie
-                     data={chartConfig.data}
-                     cx="50%"
-                     cy="50%"
-                     innerRadius={60}
-                     outerRadius={100}
-                     paddingAngle={2}
-                     dataKey={chartConfig.dataKeys[0]?.key || 'value'}
-                     nameKey={chartConfig.xAxisKey || 'name'}
+                      data={chartConfig.data}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      paddingAngle={2}
+                      dataKey={chartConfig.dataKeys[0]?.key || 'value'}
+                      nameKey={chartConfig.xAxisKey || 'name'}
                     >
                       {chartConfig.data.map((entry: any, index: number) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
