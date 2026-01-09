@@ -5,8 +5,8 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
-      // THIS LINE IS CRITICAL FOR GITHUB PAGES
-      base: '/RGCT_COUNTER/', 
+      // REQUIRED: Matches your repository name
+      base: '/RGCT_COUNTER/',
       server: {
         port: 3000,
         host: '0.0.0.0',
