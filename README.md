@@ -10,6 +10,7 @@ Upload an `.xlsx` file, visualize frequency distributions, and interactively cle
 
 ### ✨ Features
 * **Instant Analysis:** Frequency counts & % share for any Excel column.
+* **Chat with Your Data**
 * **Interactive Cleaning:** Delete rows on hover; charts update instantly.
 * **Smart History:** Undo changes or reset to raw data.
 * **Export:** Download your cleaned analysis as a CSV.
