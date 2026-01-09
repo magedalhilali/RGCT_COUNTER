@@ -154,19 +154,21 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         "title": "...",
         "chartType": "bar",
         "javascript": "return ...", 
-        "xAxisKey": "...", 
-        "dataKeys": [...]
+        "xAxisKey": "name", 
+        "dataKeys": [{"key": "value", "color": "#8884d8", "name": "Count"}]
       }
 
       ### CODING RULES
-      1. Return the result directly (e.g. \`return data.filter...\` or \`return data['Sheet1'].length\`).
+      1. Return the result directly (e.g. \`return data.filter...\`).
       2. If the user asks across multiple sheets, use the 'data' object keys.
       3. For charts, if in 'All Sheets' mode, you MUST aggregate data into a single array before returning it in 'javascript'.
+      4. CRITICAL DATA CONSISTENCY: The objects returned by your 'javascript' MUST use the exact keys defined in 'xAxisKey' and 'dataKeys'.
+         - Recommendation: Always map your result to use keys "name" (for the label) and "value" (for the number) to avoid NaN errors.
       `;
 
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-2.0-flash',
         contents: [
             ...messages.map(m => ({
                 role: m.role === 'model' ? 'model' : 'user',
@@ -365,8 +367,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 <div className="w-full mt-2 animate-fade-in max-w-[90%]">
                   <div className="bg-slate-900 rounded-lg p-3 text-xs font-mono text-indigo-200 overflow-x-auto border border-slate-700 shadow-inner">
                     <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-700 text-slate-400">
-                       <Terminal className="w-3 h-3" />
-                       <span>Executed JavaScript ({dataContext === 'active' ? 'Active Sheet' : 'All Sheets'})</span>
+                        <Terminal className="w-3 h-3" />
+                        <span>Executed JavaScript ({dataContext === 'active' ? 'Active Sheet' : 'All Sheets'})</span>
                     </div>
                     <pre className="whitespace-pre-wrap">{msg.toolResult.code}</pre>
                   </div>
