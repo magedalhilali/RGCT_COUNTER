@@ -17,7 +17,7 @@ interface ChartsViewProps {
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#10b981', '#3b82f6', '#f59e0b', '#0f172a', '#334155', '#94a3b8'];
 
-// --- SHARED INTELLIGENCE (Same as ChatInterface) ---
+// --- SHARED INTELLIGENCE ---
 const generateDataPreview = (headers: string[], data: any[]) => {
     const preview: Record<string, any[]> = {};
     if (!data || data.length === 0) return "No data available.";
@@ -35,21 +35,28 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
   const [chartConfig, setChartConfig] = useState<ChartConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // If the user generated a chart in the Chat tab, load it here automatically
+  // --- FIX 1: SEAMLESS UPDATES ---
+  // Listen for changes from the Chatbot and update immediately
   useEffect(() => {
     if (externalChartConfig) {
+      console.log("ChartsView received new config:", externalChartConfig); // Debugging
       setChartConfig(externalChartConfig);
       setPrompt(`Generated from chat: ${externalChartConfig.title}`);
+      setError(null); // Clear any previous errors
     }
   }, [externalChartConfig]);
 
-  // --- SAFE CODE EVALUATION (Enhanced to fix 'data declared' error) ---
+  // --- FIX 2: ROBUST EVALUATION ---
   const safeEvaluate = (code: string) => {
     try {
+      // 1. Safety Check: code must be a string
+      if (typeof code !== 'string' || !code.trim()) {
+         return { success: false, error: "AI returned empty or invalid code." };
+      }
+
       if (!window.fullDataset) throw new Error("Dataset not loaded.");
       
-      // Safety Hack: If the AI tries to redeclare 'data', remove that line.
-      // This fixes the "Identifier 'data' has already been declared" error.
+      // 2. Fix the "Identifier 'data' has already been declared" error
       const sanitizedCode = code.replace(/const\s+data\s*=/g, '// const data =');
 
       const sandboxFn = new Function('data', sanitizedCode);
@@ -72,13 +79,11 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
     setError(null);
 
     try {
-      // 1. Scan Data (The "Brain" from Chatbot)
       let dataPreview = "Data unavailable";
       if (window.fullDataset) {
          dataPreview = generateDataPreview(headers, window.fullDataset);
       }
 
-      // 2. Strict Instructions (Same as Chatbot)
       const systemInstruction = `
         You are an Expert Data Visualization Engineer.
         You have access to a dataset in the variable 'data'. Headers: ${JSON.stringify(headers)}.
@@ -95,7 +100,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
         2. **Return an ARRAY.** Recharts fails if you return an Object. 
            - BAD: { "A": 10, "B": 20 }
            - GOOD: [{ name: "A", value: 10 }, { name: "B", value: 20 }]
-        3. **Standardize Keys:** Always use 'name' for the label and 'value' for the number in your array objects.
+        3. **Standardize Keys:** Always use 'name' for the label and 'value' for the number.
 
         ### JSON RESPONSE FORMAT
         {
@@ -121,7 +126,17 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
       });
 
       const cleanJson = (response.text || "{}").replace(/```json/g, "").replace(/```/g, "").trim();
-      const parsed = JSON.parse(cleanJson);
+      let parsed;
+      try {
+        parsed = JSON.parse(cleanJson);
+      } catch (e) {
+        throw new Error("AI returned invalid JSON. Please try again.");
+      }
+
+      // --- FIX 3: CHECK FOR JAVASCRIPT FIELD ---
+      if (!parsed.javascript) {
+         throw new Error("AI failed to generate code logic. Please try rephrasing.");
+      }
 
       const exec = safeEvaluate(parsed.javascript);
       if (!exec.success) {
@@ -151,7 +166,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
     }
   };
 
-  // --- RENDERERS (Same as before) ---
+  // --- RENDERERS ---
   const renderCustomLegend = (data: any[], dataKey: string, nameKey: string) => {
     return (
       <div className="mt-8 border-t border-slate-100 pt-6 w-full">
