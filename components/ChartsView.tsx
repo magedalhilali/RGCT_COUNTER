@@ -4,7 +4,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell 
 } from 'recharts';
 import { GoogleGenAI } from '@google/genai';
-import { Sparkles, Loader2, FileText, Send } from 'lucide-react';
+import { Sparkles, Loader2, FileText, Send, AlertTriangle } from 'lucide-react';
 import { ChartConfig } from '../types';
 
 interface ChartsViewProps {
@@ -17,13 +17,10 @@ interface ChartsViewProps {
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#10b981', '#3b82f6', '#f59e0b', '#0f172a', '#334155', '#94a3b8'];
 
-// --- NEW: Helper to get data context (Copied from ChatInterface) ---
+// --- SHARED INTELLIGENCE (Same as ChatInterface) ---
 const generateDataPreview = (headers: string[], data: any[]) => {
     const preview: Record<string, any[]> = {};
     if (!data || data.length === 0) return "No data available.";
-
-    // For each column, find up to 20 unique values to show the AI
-    // This helps it map "Yemen" -> "YEMEN" or "Mgr" -> "Manager"
     headers.forEach(header => {
         const allValues = data.map(row => row[header]);
         const uniqueValues = Array.from(new Set(allValues.filter(v => v !== null && v !== undefined && v !== '')));
@@ -38,6 +35,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
   const [chartConfig, setChartConfig] = useState<ChartConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // If the user generated a chart in the Chat tab, load it here automatically
   useEffect(() => {
     if (externalChartConfig) {
       setChartConfig(externalChartConfig);
@@ -45,10 +43,16 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
     }
   }, [externalChartConfig]);
 
+  // --- SAFE CODE EVALUATION (Enhanced to fix 'data declared' error) ---
   const safeEvaluate = (code: string) => {
     try {
       if (!window.fullDataset) throw new Error("Dataset not loaded.");
-      const sandboxFn = new Function('data', code);
+      
+      // Safety Hack: If the AI tries to redeclare 'data', remove that line.
+      // This fixes the "Identifier 'data' has already been declared" error.
+      const sanitizedCode = code.replace(/const\s+data\s*=/g, '// const data =');
+
+      const sandboxFn = new Function('data', sanitizedCode);
       const result = sandboxFn(window.fullDataset);
       return { success: true, result };
     } catch (error: any) {
@@ -68,40 +72,40 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
     setError(null);
 
     try {
-      // --- INTELLIGENT DATA SCANNING ---
+      // 1. Scan Data (The "Brain" from Chatbot)
       let dataPreview = "Data unavailable";
       if (window.fullDataset) {
          dataPreview = generateDataPreview(headers, window.fullDataset);
       }
 
+      // 2. Strict Instructions (Same as Chatbot)
       const systemInstruction = `
         You are an Expert Data Visualization Engineer.
-        You have access to a dataset in 'data'. Headers: ${JSON.stringify(headers)}.
+        You have access to a dataset in the variable 'data'. Headers: ${JSON.stringify(headers)}.
         
-        ### DATA PREVIEW / VALUE DICTIONARY
-        Here are the unique values found in the columns. USE THIS TO MATCH USER TERMS TO ACTUAL DATA VALUES.
-        (Example: If user asks for "Egyptian", check this list. If you see "EGYPT", use "EGYPT" in your code).
-        
+        ### DATA PREVIEW / DICTIONARY
+        Use this to match user terms (e.g. "Yemen") to exact data values (e.g. "YEMEN"):
         ${dataPreview}
 
-        Generate a JSON response to render a chart using Recharts.
-        
+        ### GOAL
+        Generate a JSON configuration for a Recharts graph based on the user's request.
+
+        ### CRITICAL CODING RULES
+        1. **Do NOT redeclare 'data'.** It is passed to you as an argument. Use it directly.
+        2. **Return an ARRAY.** Recharts fails if you return an Object. 
+           - BAD: { "A": 10, "B": 20 }
+           - GOOD: [{ name: "A", value: 10 }, { name: "B", value: 20 }]
+        3. **Standardize Keys:** Always use 'name' for the label and 'value' for the number in your array objects.
+
         ### JSON RESPONSE FORMAT
         {
           "title": "Chart Title",
-          "description": "Short description of insights",
+          "description": "Short explanation",
           "type": "bar" | "line" | "pie" | "area" | "scatter",
-          "javascript": "return ...", 
+          "javascript": "return data.filter(...).map(...);", 
           "xAxisKey": "name", 
-          "dataKeys": [ { "key": "value", "color": "#8884d8", "name": "Label" } ]
+          "dataKeys": [ { "key": "value", "color": "#6366f1", "name": "Count" } ]
         }
-        
-        ### CODING RULES
-        1. **Natural Language Matching:** If the user uses a term (e.g. "Egyptian") that doesn't perfectly match the data (e.g. "EGYPT"), ALWAYS check the Data Preview provided above.
-        2. **Array Format Only:** NEVER return a plain Object (dictionary). Recharts requires an ARRAY of Objects.
-           - **BAD:** \`return { "EGYPT": 10, "INDIA": 5 }\`
-           - **GOOD:** \`const counts = ...; return Object.entries(counts).map(([k, v]) => ({ name: k, value: v }));\`
-        3. Use keys "name" and "value" for simple bar/pie charts to avoid NaN errors.
       `;
 
       const ai = new GoogleGenAI({ apiKey });
@@ -124,9 +128,8 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
         throw new Error(`Data processing failed: ${exec.error}`);
       }
 
-      // Safety check: Ensure result is an Array
       if (!Array.isArray(exec.result)) {
-        throw new Error("AI generated data in the wrong format (Object instead of Array). Please try again.");
+        throw new Error("AI generated data in the wrong format (Object instead of Array).");
       }
 
       const config: ChartConfig = {
@@ -141,13 +144,14 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
       setChartConfig(config);
 
     } catch (err: any) {
+      console.error(err);
       setError(err.message || "Failed to generate chart");
     } finally {
       setIsGenerating(false);
     }
   };
 
-  // Custom Legend Renderer
+  // --- RENDERERS (Same as before) ---
   const renderCustomLegend = (data: any[], dataKey: string, nameKey: string) => {
     return (
       <div className="mt-8 border-t border-slate-100 pt-6 w-full">
@@ -173,7 +177,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
     }
 
     const isManyItems = chartConfig.data.length > 8;
-
     const commonProps = {
       data: chartConfig.data,
       margin: { top: 20, right: 30, left: 20, bottom: isManyItems ? 20 : 5 }
@@ -196,59 +199,53 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
     switch (chartConfig.type) {
       case 'bar':
         return (
-          <div className="flex flex-col w-full">
-            <div className="h-[400px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart {...commonProps}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  {standardXAxis}
-                  {standardYAxis}
-                  <Tooltip cursor={{ fill: '#f1f5f9' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                  <Legend wrapperStyle={{ paddingTop: '10px' }} />
-                  {chartConfig.dataKeys.map((k, i) => (
-                    <Bar key={k.key} dataKey={k.key} name={k.name} fill={k.color || COLORS[i % COLORS.length]} radius={[4, 4, 0, 0]} />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+          <div className="h-[400px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart {...commonProps}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                {standardXAxis}
+                {standardYAxis}
+                <Tooltip cursor={{ fill: '#f1f5f9' }} contentStyle={{ borderRadius: '8px', border: 'none' }} />
+                <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                {chartConfig.dataKeys.map((k, i) => (
+                  <Bar key={k.key} dataKey={k.key} name={k.name} fill={k.color || COLORS[i % COLORS.length]} radius={[4, 4, 0, 0]} />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         );
       case 'line':
         return (
-          <div className="flex flex-col w-full">
-            <div className="h-[400px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart {...commonProps}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  {standardXAxis}
-                  {standardYAxis}
-                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                  <Legend wrapperStyle={{ paddingTop: '10px' }} />
-                  {chartConfig.dataKeys.map((k, i) => (
-                    <Line key={k.key} type="monotone" dataKey={k.key} name={k.name} stroke={k.color || COLORS[i % COLORS.length]} strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+          <div className="h-[400px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart {...commonProps}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                {standardXAxis}
+                {standardYAxis}
+                <Tooltip contentStyle={{ borderRadius: '8px', border: 'none' }} />
+                <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                {chartConfig.dataKeys.map((k, i) => (
+                  <Line key={k.key} type="monotone" dataKey={k.key} name={k.name} stroke={k.color || COLORS[i % COLORS.length]} strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
           </div>
         );
       case 'area':
         return (
-          <div className="flex flex-col w-full">
-            <div className="h-[400px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart {...commonProps}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  {standardXAxis}
-                  {standardYAxis}
-                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                  <Legend wrapperStyle={{ paddingTop: '10px' }} />
-                  {chartConfig.dataKeys.map((k, i) => (
-                    <Area key={k.key} type="monotone" dataKey={k.key} name={k.name} stackId="1" fill={k.color || COLORS[i % COLORS.length]} stroke={k.color || COLORS[i % COLORS.length]} />
-                  ))}
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+          <div className="h-[400px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart {...commonProps}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                {standardXAxis}
+                {standardYAxis}
+                <Tooltip contentStyle={{ borderRadius: '8px', border: 'none' }} />
+                <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                {chartConfig.dataKeys.map((k, i) => (
+                  <Area key={k.key} type="monotone" dataKey={k.key} name={k.name} stackId="1" fill={k.color || COLORS[i % COLORS.length]} stroke={k.color || COLORS[i % COLORS.length]} />
+                ))}
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
         );
       case 'pie':
@@ -257,7 +254,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
             <div className="h-[350px] sm:h-[400px] w-full">
                <ResponsiveContainer width="100%" height="100%">
                  <PieChart>
-                    <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                    <Tooltip contentStyle={{ borderRadius: '8px', border: 'none' }} />
                     <Pie
                       data={chartConfig.data}
                       cx="50%"
@@ -280,19 +277,17 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
         );
       case 'scatter':
         return (
-           <div className="flex flex-col w-full">
-             <div className="h-[400px] w-full">
-               <ResponsiveContainer width="100%" height="100%">
-                 <ScatterChart {...commonProps}>
-                   <CartesianGrid />
-                   <XAxis type="number" dataKey={chartConfig.xAxisKey} name={chartConfig.xAxisKey} />
-                   <YAxis type="number" dataKey={chartConfig.dataKeys[0].key} name={chartConfig.dataKeys[0].name} />
-                   <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                   <Legend />
-                   <Scatter name={chartConfig.dataKeys[0].name} data={chartConfig.data} fill="#8884d8" />
-                 </ScatterChart>
-               </ResponsiveContainer>
-             </div>
+           <div className="h-[400px] w-full">
+             <ResponsiveContainer width="100%" height="100%">
+               <ScatterChart {...commonProps}>
+                 <CartesianGrid />
+                 <XAxis type="number" dataKey={chartConfig.xAxisKey} name={chartConfig.xAxisKey} />
+                 <YAxis type="number" dataKey={chartConfig.dataKeys[0].key} name={chartConfig.dataKeys[0].name} />
+                 <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ borderRadius: '8px', border: 'none' }} />
+                 <Legend />
+                 <Scatter name={chartConfig.dataKeys[0].name} data={chartConfig.data} fill="#8884d8" />
+               </ScatterChart>
+             </ResponsiveContainer>
            </div>
         );
       default:
@@ -313,6 +308,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
       </div>
 
       <div className="flex flex-col gap-4">
+        {/* Input Section */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
            <label className="block text-sm font-medium text-slate-700 mb-2">Describe the chart you want</label>
            <div className="relative">
@@ -332,13 +328,18 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
                 {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
              </button>
            </div>
+           <p className="text-xs text-slate-400 mt-2">
+              Tip: You can ask for "Distribution of...", "Top 10...", or specific filters like "Employees from Yemen".
+           </p>
         </div>
 
+        {/* Chart Display Section */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col relative min-h-[400px]">
           {error ? (
-             <div className="absolute inset-0 flex flex-col items-center justify-center text-red-500 p-8 text-center">
-                <span className="text-4xl mb-2">⚠️</span>
-                <p>{error}</p>
+             <div className="absolute inset-0 flex flex-col items-center justify-center text-red-500 p-8 text-center animate-fade-in">
+                <AlertTriangle className="w-10 h-10 mb-3 opacity-80" />
+                <p className="font-medium text-slate-800 mb-1">Could not generate chart</p>
+                <p className="text-sm text-slate-500 max-w-xs">{error}</p>
              </div>
           ) : !chartConfig ? (
              <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 opacity-60">
@@ -346,13 +347,13 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
                <p>Your chart will appear here</p>
              </div>
           ) : (
-            <div className="flex flex-col w-full">
+            <div className="flex flex-col w-full animate-fade-in">
                <div className="p-4 border-b border-slate-100 flex justify-between items-start">
                   <div>
                     <h3 className="text-lg font-bold text-slate-900 line-clamp-1">{chartConfig.title}</h3>
                     <p className="text-sm text-slate-500 line-clamp-1">{chartConfig.description}</p>
                   </div>
-                  <span className="text-xs font-mono uppercase bg-slate-100 text-slate-500 px-2 py-1 rounded whitespace-nowrap ml-2">
+                  <span className="text-xs font-mono uppercase bg-slate-100 text-slate-500 px-2 py-1 rounded whitespace-nowrap ml-2 border border-slate-200">
                     {chartConfig.type}
                   </span>
                </div>
