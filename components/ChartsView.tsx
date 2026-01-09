@@ -35,35 +35,40 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
   const [chartConfig, setChartConfig] = useState<ChartConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // --- FIX 1: SEAMLESS UPDATES ---
-  // Listen for changes from the Chatbot and update immediately
+  // --- SEAMLESS UPDATES ---
   useEffect(() => {
     if (externalChartConfig) {
-      console.log("ChartsView received new config:", externalChartConfig); // Debugging
       setChartConfig(externalChartConfig);
       setPrompt(`Generated from chat: ${externalChartConfig.title}`);
-      setError(null); // Clear any previous errors
+      setError(null);
     }
   }, [externalChartConfig]);
 
-  // --- FIX 2: ROBUST EVALUATION ---
+  // --- ROBUST EVALUATION ---
   const safeEvaluate = (code: string) => {
     try {
-      // 1. Safety Check: code must be a string
       if (typeof code !== 'string' || !code.trim()) {
          return { success: false, error: "AI returned empty or invalid code." };
       }
 
       if (!window.fullDataset) throw new Error("Dataset not loaded.");
       
-      // 2. Fix the "Identifier 'data' has already been declared" error
-      const sanitizedCode = code.replace(/const\s+data\s*=/g, '// const data =');
+      // FIX 1: Handle "Identifier 'data' has already been declared"
+      // We replace 'const data =' with 'data =' to allow reassignment of the argument
+      // We also strip markdown code blocks just in case
+      let sanitizedCode = code.replace(/```javascript/g, '').replace(/```/g, '');
+      sanitizedCode = sanitizedCode.replace(/(const|let|var)\s+data\s*=/g, 'data =');
 
       const sandboxFn = new Function('data', sanitizedCode);
       const result = sandboxFn(window.fullDataset);
       return { success: true, result };
     } catch (error: any) {
-      return { success: false, error: error.message };
+      // Provide a clearer error message for runtime crashes (like .replace on undefined)
+      let niceError = error.message;
+      if (niceError.includes('replace') || niceError.includes('toLowerCase')) {
+         niceError += " (Likely caused by empty cells in the data. AI needs to check for nulls.)";
+      }
+      return { success: false, error: niceError };
     }
   };
 
@@ -89,15 +94,17 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
         You have access to a dataset in the variable 'data'. Headers: ${JSON.stringify(headers)}.
         
         ### DATA PREVIEW / DICTIONARY
-        Use this to match user terms (e.g. "Yemen") to exact data values (e.g. "YEMEN"):
+        Use this to match user terms to exact data values.
         ${dataPreview}
 
         ### GOAL
         Generate a JSON configuration for a Recharts graph based on the user's request.
 
         ### CRITICAL CODING RULES
-        1. **Do NOT redeclare 'data'.** It is passed to you as an argument. Use it directly.
-        2. **Return an ARRAY.** Recharts fails if you return an Object. 
+        1. **Null Safety is MANDATORY:** The dataset has empty cells. You MUST handle null/undefined values.
+           - BAD: \`row['Nationality'].replace(...)\` (Crashes if null)
+           - GOOD: \`(row['Nationality'] || '').toString().replace(...)\`
+        2. **Return an ARRAY:** Recharts fails if you return an Object. 
            - BAD: { "A": 10, "B": 20 }
            - GOOD: [{ name: "A", value: 10 }, { name: "B", value: 20 }]
         3. **Standardize Keys:** Always use 'name' for the label and 'value' for the number.
@@ -133,14 +140,13 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
         throw new Error("AI returned invalid JSON. Please try again.");
       }
 
-      // --- FIX 3: CHECK FOR JAVASCRIPT FIELD ---
       if (!parsed.javascript) {
          throw new Error("AI failed to generate code logic. Please try rephrasing.");
       }
 
       const exec = safeEvaluate(parsed.javascript);
       if (!exec.success) {
-        throw new Error(`Data processing failed: ${exec.error}`);
+        throw new Error(`Code Error: ${exec.error}`);
       }
 
       if (!Array.isArray(exec.result)) {
