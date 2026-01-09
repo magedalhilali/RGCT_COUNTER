@@ -17,6 +17,20 @@ interface ChartsViewProps {
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#10b981', '#3b82f6', '#f59e0b', '#0f172a', '#334155', '#94a3b8'];
 
+// --- NEW: Helper to get data context (Same as ChatInterface) ---
+const generateDataPreview = (headers: string[], data: any[]) => {
+    const preview: Record<string, any[]> = {};
+    if (!data || data.length === 0) return "No data available.";
+
+    // For each column, find up to 20 unique values to show the AI
+    headers.forEach(header => {
+        const allValues = data.map(row => row[header]);
+        const uniqueValues = Array.from(new Set(allValues.filter(v => v !== null && v !== undefined && v !== '')));
+        preview[header] = uniqueValues.slice(0, 20);
+    });
+    return JSON.stringify(preview);
+};
+
 export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileName, externalChartConfig, onRequestApiKey }) => {
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -53,10 +67,22 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
     setError(null);
 
     try {
+      // --- INTELLIGENT DATA SCANNING ---
+      let dataPreview = "Data unavailable";
+      if (window.fullDataset) {
+         dataPreview = generateDataPreview(headers, window.fullDataset);
+      }
+
       const systemInstruction = `
         You are an Expert Data Visualization Engineer.
         You have access to a dataset in 'data'. Headers: ${JSON.stringify(headers)}.
         
+        ### DATA PREVIEW / VALUE DICTIONARY
+        Here are the unique values found in the columns. USE THIS TO MATCH USER TERMS TO ACTUAL DATA VALUES.
+        (Example: If user asks for "Egyptian", check this list. If you see "EGYPT", use "EGYPT" in your code).
+        
+        ${dataPreview}
+
         Generate a JSON response to render a chart using Recharts.
         
         ### JSON RESPONSE FORMAT
@@ -69,10 +95,12 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
           "dataKeys": [ { "key": "value", "color": "#8884d8", "name": "Label" } ]
         }
         
-        Rules:
-        1. Use 'data' (array of objects).
-        2. Aggregation is often needed.
-        3. For Pie charts, always return keys 'name' and 'value'.
+        ### CODING RULES
+        1. **Natural Language Matching:** If the user uses a term (e.g. "Egyptian") that doesn't perfectly match the data (e.g. "EGYPT"), ALWAYS check the Data Preview provided above.
+        2. **Array Format Only:** NEVER return a plain Object (dictionary). Recharts requires an ARRAY of Objects.
+           - **BAD:** \`return { "EGYPT": 10, "INDIA": 5 }\`
+           - **GOOD:** \`const counts = ...; return Object.entries(counts).map(([k, v]) => ({ name: k, value: v }));\`
+        3. Use keys "name" and "value" for simple bar/pie charts to avoid NaN errors.
       `;
 
       const ai = new GoogleGenAI({ apiKey });
@@ -95,6 +123,11 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
         throw new Error(`Data processing failed: ${exec.error}`);
       }
 
+      // Safety check: Ensure result is an Array
+      if (!Array.isArray(exec.result)) {
+        throw new Error("AI generated data in the wrong format (Object instead of Array). Please try again.");
+      }
+
       const config: ChartConfig = {
         title: parsed.title,
         description: parsed.description,
@@ -113,7 +146,7 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
     }
   };
 
-  // Custom Legend Renderer: Flows naturally with page content (no internal scroll)
+  // Custom Legend Renderer
   const renderCustomLegend = (data: any[], dataKey: string, nameKey: string) => {
     return (
       <div className="mt-8 border-t border-slate-100 pt-6 w-full">
@@ -123,7 +156,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
             <div key={`legend-${index}`} className="flex items-center gap-2 p-2 bg-slate-50 rounded border border-slate-100 text-xs">
               <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
               <span className="truncate font-medium text-slate-700" title={entry[nameKey]}>{entry[nameKey]}</span>
-              {/* FIXED: Added '|| 0' to prevent NaN if the key is missing */}
               <span className="text-slate-500 font-mono ml-auto">{Number(entry[dataKey] || 0).toLocaleString()}</span>
             </div>
           ))}
@@ -141,13 +173,11 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
 
     const isManyItems = chartConfig.data.length > 8;
 
-    // Standard Vertical Layout props (Restored)
     const commonProps = {
       data: chartConfig.data,
       margin: { top: 20, right: 30, left: 20, bottom: isManyItems ? 20 : 5 }
     };
 
-    // Rotated X-Axis logic (Restored)
     const standardXAxis = (
       <XAxis 
         dataKey={chartConfig.xAxisKey} 
@@ -223,7 +253,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
       case 'pie':
         return (
           <div className="flex flex-col w-full">
-            {/* Chart height fixed, allowing it to take space */}
             <div className="h-[350px] sm:h-[400px] w-full">
                <ResponsiveContainer width="100%" height="100%">
                  <PieChart>
@@ -245,7 +274,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
                  </PieChart>
                </ResponsiveContainer>
             </div>
-            {/* Legend renders normally in flow, expanding the container */}
             {renderCustomLegend(chartConfig.data, chartConfig.dataKeys[0]?.key || 'value', chartConfig.xAxisKey || 'name')}
           </div>
         );
@@ -284,7 +312,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
       </div>
 
       <div className="flex flex-col gap-4">
-        {/* Input Section */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
            <label className="block text-sm font-medium text-slate-700 mb-2">Describe the chart you want</label>
            <div className="relative">
@@ -306,8 +333,6 @@ export const ChartsView: React.FC<ChartsViewProps> = ({ headers, apiKey, fileNam
            </div>
         </div>
 
-        {/* Chart Display Section */}
-        {/* Removed flex-grow and overflow-hidden to allow natural height expansion */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col relative min-h-[400px]">
           {error ? (
              <div className="absolute inset-0 flex flex-col items-center justify-center text-red-500 p-8 text-center">
