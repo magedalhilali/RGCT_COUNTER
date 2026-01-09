@@ -1,4 +1,3 @@
-
 export interface FrequencyItem {
   name: string;
   originalName: string; // The display version (e.g. first occurrence)
