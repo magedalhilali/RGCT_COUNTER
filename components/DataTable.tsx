@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
-import { Download, Search, ArrowUpDown, ArrowUp, ArrowDown, Pin, PinOff } from 'lucide-react';
+import { Download, Search, ArrowUpDown, ArrowUp, ArrowDown, Pin, PinOff, Trash2 } from 'lucide-react';
 import { AnalysisResult } from '../types';
 import { exportToCSV } from '../utils/processor';
 
 interface DataTableProps {
   data: AnalysisResult['data'];
   originalColumnName: string;
+  onDeleteRow: (itemName: string) => void; // New prop
 }
 
 type SortKey = 'originalName' | 'count';
 type SortDirection = 'asc' | 'desc';
 
-export const DataTable: React.FC<DataTableProps> = ({ data, originalColumnName }) => {
+export const DataTable: React.FC<DataTableProps> = ({ data, originalColumnName, onDeleteRow }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isSticky, setIsSticky] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({
@@ -81,7 +82,7 @@ export const DataTable: React.FC<DataTableProps> = ({ data, originalColumnName }
         </div>
       </div>
 
-      {/* Table Container - Conditional styles for Sticky Mode */}
+      {/* Table Container */}
       <div className={`overflow-x-auto transition-all duration-300 ${isSticky ? 'max-h-[70vh] overflow-y-auto border-b border-slate-200 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100' : ''}`}>
         <table className="min-w-full divide-y divide-slate-200 relative border-collapse">
           <thead className="bg-slate-50">
@@ -122,12 +123,14 @@ export const DataTable: React.FC<DataTableProps> = ({ data, originalColumnName }
               <th scope="col" className={`px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider w-1/3 ${isSticky ? 'sticky top-0 z-10 bg-slate-50 shadow-sm' : ''}`}>
                 Distribution
               </th>
+              {/* Empty header for delete action */}
+              <th scope="col" className={`w-10 ${isSticky ? 'sticky top-0 z-10 bg-slate-50 shadow-sm' : ''}`}></th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-slate-200">
             {sortedData.length > 0 ? (
               sortedData.map((item, idx) => (
-                <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                <tr key={idx} className="group hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
                     {item.originalName}
                   </td>
@@ -140,16 +143,28 @@ export const DataTable: React.FC<DataTableProps> = ({ data, originalColumnName }
                   <td className="px-6 py-4 whitespace-nowrap align-middle">
                     <div className="w-full bg-slate-100 rounded-full h-2">
                       <div 
-                        className="bg-indigo-600 h-2 rounded-full" 
+                        className="bg-indigo-600 h-2 rounded-full transition-all duration-500" 
                         style={{ width: `${Math.max(item.percentage, 1)}%` }}
                       ></div>
                     </div>
+                  </td>
+                  <td className="px-4 py-4 whitespace-nowrap text-right">
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteRow(item.originalName);
+                        }}
+                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                        title="Remove from analysis"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </button>
                   </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={4} className="px-6 py-8 text-center text-sm text-slate-500">
+                <td colSpan={5} className="px-6 py-8 text-center text-sm text-slate-500">
                   No results match your filter.
                 </td>
               </tr>
